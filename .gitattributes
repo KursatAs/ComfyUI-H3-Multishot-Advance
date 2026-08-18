@@ -1,8 +1,35 @@
-* text=auto
+# Keep source/package files stable across Windows and Linux.
+* text=auto eol=lf
 
 *.py text eol=lf
 *.js text eol=lf
 *.md text eol=lf
 *.toml text eol=lf
 *.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
 *.txt text eol=lf
+
+.comfyignore text eol=lf
+.gitignore text eol=lf
+LICENSE text eol=lf
+
+# Native Windows helper scripts, if added later.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary/model/media assets must never be line-ending-normalized.
+*.gif binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.webp binary
+*.mp3 binary
+*.mp4 binary
+*.wav binary
+*.gguf binary
+*.safetensors binary
+*.ckpt binary
+*.pt binary
+*.pth binary
