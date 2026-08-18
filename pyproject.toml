@@ -1,0 +1,26 @@
+[project]
+name = "ComfyUI-H3-Multishot-Advance"
+description = "Advanced multi-shot chaining for MiniMax-H3 audio+video with resumable cache, continuity controls, and unified model loading."
+version = "1.0.0"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+
+# Deliberately empty. Every third-party import in this pack -- torch,
+# torchaudio, psutil, av, numpy, PIL -- is already guaranteed by ComfyUI's own
+# requirements.txt. Declaring torch or torchaudio here invites pip to resolve
+# and reinstall them, which is a well-known way to replace a working CUDA build
+# with a CPU wheel on someone else's machine.
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/KursatAs/ComfyUI-H3-Multishot-Advance"
+#  Used by Comfy Registry https://registry.comfy.org
+Documentation = "https://github.com/KursatAs/ComfyUI-H3-Multishot-Advance/wiki"
+"Bug Tracker" = "https://github.com/KursatAs/ComfyUI-H3-Multishot-Advance/issues"
+
+[tool.comfy]
+PublisherId = "kursatas"
+DisplayName = "H3 Multishot Advance"
+Icon = ""
+includes = []
+# "requires-comfyui" = ">=1.0.0"  # ComfyUI version compatibility
