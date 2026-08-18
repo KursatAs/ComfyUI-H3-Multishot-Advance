@@ -42,8 +42,9 @@ function ensureStyle() {
             overflow-wrap: anywhere;
             animation: h3ToastIn 140ms ease-out;
         }
-        /* KursatAs 2026-08-18 05:47: make progress toasts visibly blue and
-           failure/warning toasts red instead of sharing the dark default. */
+        /* KursatAs 2026-08-18 05:47: make progress toasts visibly blue.
+           KursatAs 2026-08-18: warning-level H3 notices are not hard failures,
+           so show them as dark amber/orange; keep real errors red. */
         .h3-toast-info {
             --h3-toast-bg: linear-gradient(135deg, rgba(2, 132, 199, 0.98), rgba(12, 74, 110, 0.98));
             --h3-toast-border: rgba(125, 211, 252, 0.36);
@@ -51,10 +52,10 @@ function ensureStyle() {
             border-left-color: #7dd3fc;
         }
         .h3-toast-warning {
-            --h3-toast-bg: linear-gradient(135deg, rgba(185, 28, 28, 0.98), rgba(127, 29, 29, 0.98));
-            --h3-toast-border: rgba(252, 165, 165, 0.40);
-            --h3-toast-shadow: rgba(185, 28, 28, 0.34);
-            border-left-color: #fecaca;
+            --h3-toast-bg: linear-gradient(135deg, rgba(180, 83, 9, 0.98), rgba(120, 53, 15, 0.98));
+            --h3-toast-border: rgba(251, 191, 36, 0.42);
+            --h3-toast-shadow: rgba(180, 83, 9, 0.34);
+            border-left-color: #fbbf24;
         }
         .h3-toast-error {
             --h3-toast-bg: linear-gradient(135deg, rgba(153, 27, 27, 0.98), rgba(69, 10, 10, 0.98));

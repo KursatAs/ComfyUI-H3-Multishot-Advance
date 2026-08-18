@@ -48,7 +48,7 @@ def _apply(model, class_name, url, label, **kw):
         _msg = ("%s is ON but its pack is not installed - rendering at normal "
                 "speed. Install: %s" % (label, url))
         print("[H3SpeedBoosters] " + _msg, flush=True)
-        _h3_notify(_msg, "warning", "H3 Speed Boosters",
+        _h3_notify(_msg, "warning", "H3 optional speed booster",
                    tag="H3SpeedBoosters")
         return model
 
@@ -57,7 +57,7 @@ def _apply(model, class_name, url, label, **kw):
                 "speed for this booster. Check/update its pack: %s"
                 % (label, reason, url))
         print("[H3SpeedBoosters] " + _msg, flush=True)
-        _h3_notify(_msg, "warning", "H3 Speed Boosters",
+        _h3_notify(_msg, "warning", "H3 optional speed booster",
                    tag="H3SpeedBoosters")
         return model
 
@@ -178,7 +178,7 @@ class H3SpeedBoosters:
                     "Spectrum alone and can visibly damage people. Prefer "
                     "enabling only one.")
             print("[H3SpeedBoosters] WARNING: " + _msg, flush=True)
-            _h3_notify(_msg, "warning", "H3 Speed Boosters",
+            _h3_notify(_msg, "warning", "H3 speed/quality risk",
                        tag="H3SpeedBoosters")
         if easycache:
             model = _apply(model, "EasyCache",

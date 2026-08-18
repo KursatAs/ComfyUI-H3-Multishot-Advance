@@ -3413,24 +3413,34 @@ class H3MultishotMemorySampler:
         # task/checkpoint guard: continuity mode dictates the checkpoint.
         _ckpt = str(getattr(getattr(model, "model", None),
                             "h3_checkpoint_name", "") or "").lower()
+        _is_fl = "fl2va" in _ckpt
+        _is_ref = "ref2va" in _ckpt
         if _ckpt:
-            _is_fl = "fl2va" in _ckpt
-            _is_ref = "ref2va" in _ckpt
-            if continuity == "first_frame" and _is_ref:
+            if continuity == "first_frame" and _is_fl:
+                _msg = ("fl2va quality path active: continuity=first_frame is "
+                        "the intended hand-off mode for this checkpoint. "
+                        "Reference-row features are not required for this path.")
+                print("[H3Memory] " + _msg, flush=True)
+                _h3_notify(_msg, "info", "H3 fl2va quality path",
+                           tag="H3Memory", timeout_ms=6000)
+            elif continuity == "first_frame" and _is_ref:
                 _msg = ("continuity=first_frame hands the previous last frame "
                         "over as the fl2va task, but a ref2va checkpoint is "
                         "loaded. The hand-off will be weak (soft keyframe "
                         "only). Load an fl2va checkpoint.")
                 print("[H3Memory] WARNING: " + _msg, flush=True)
-                _h3_notify(_msg, "warning", "H3 checkpoint mismatch",
+                _h3_notify(_msg, "warning", "H3 mode/checkpoint notice",
                            tag="H3Memory")
             elif continuity != "first_frame" and _is_fl and _ref_rows_expected:
-                _msg = ("the memory bank needs reference rows (ref2va), but an "
-                        "fl2va checkpoint is loaded. Bank/reference slots will "
-                        "be ignored - use continuity=first_frame with fl2va, "
-                        "or load ref2va.")
+                _msg = ("fl2va checkpoint loaded: this is the quality/first-"
+                        "frame path, but the current workflow also enables "
+                        "ref2va-only reference rows (memory bank, reference "
+                        "images, start_image identity refs, or voice/video "
+                        "refs). Those slots will be ignored by fl2va. Use "
+                        "continuity=first_frame for the fl2va path, or load "
+                        "ref2va when you want reference-row conditioning.")
                 print("[H3Memory] WARNING: " + _msg, flush=True)
-                _h3_notify(_msg, "warning", "H3 checkpoint mismatch",
+                _h3_notify(_msg, "warning", "H3 mode/checkpoint notice",
                            tag="H3Memory")
             if start_image is not None and _is_fl:
                 # Reported from the field: start_image connected, fl2va loaded,
@@ -3438,16 +3448,16 @@ class H3MultishotMemorySampler:
                 # supplied picture. Nothing was misconfigured - this input is an
                 # identity REFERENCE ROW here, and fl2va has no reference rows,
                 # so it is built and then ignored.
-                _msg = ("start_image on THIS node is an identity reference "
-                        "image, NOT a first frame - and an fl2va checkpoint has "
-                        "no reference rows, so it is ignored entirely. Shot 1 "
-                        "will NOT open on it. To start shot 1 on a specific "
-                        "picture in this Advance pack, set continuity=flf_chain "
-                        "and feed keyframe_images (N+1 stills for N shots). "
-                        "To use start_image for identity instead, load a ref2va "
-                        "checkpoint.")
-                print("[H3Memory] WARNING: " + _msg, flush=True)
-                _h3_notify(_msg, "warning", "H3 start image ignored",
+                _msg = ("start_image on this node is an identity/reference "
+                        "image, not a first-frame input. fl2va has no "
+                        "reference rows, so this input has no effect on the "
+                        "fl2va path and shot 1 will not open on it. To force "
+                        "shot 1 to start on a specific picture in this Advance "
+                        "pack, use continuity=flf_chain with keyframe_images "
+                        "(N+1 stills for N shots). To use start_image as an "
+                        "identity reference, load a ref2va checkpoint.")
+                print("[H3Memory] NOTE: " + _msg, flush=True)
+                _h3_notify(_msg, "info", "H3 start_image note",
                            tag="H3Memory")
 
         bank = _H3ChainBank(num_fix=bank_pinned, max_size=cap)
@@ -3617,7 +3627,8 @@ class H3MultishotMemorySampler:
                     "context_pin latent before sampling. Default remains off; "
                     "switch to flatten or off if VRAM climbs.")
             print("[H3Memory] WARNING: " + _msg, flush=True)
-            _h3_notify(_msg, "warning", "H3 flatten_pin", tag="H3Memory")
+            _h3_notify(_msg, "warning", "H3 experimental setting",
+                       tag="H3Memory")
 
         if bank_pinned == 0 and n > 4:
             _msg = ("bank_pinned=0 on a %d-shot chain. With no pinned slot "
@@ -3627,12 +3638,23 @@ class H3MultishotMemorySampler:
                     "2026-08-11). Set bank_pinned=1, and keep chains short if "
                     "the voice matters." % n)
             print("[H3Memory] WARNING: " + _msg, flush=True)
-            _h3_notify(_msg, "warning", "H3 memory bank warning",
+            _h3_notify(_msg, "warning", "H3 continuity risk",
                        tag="H3Memory")
-        print(f"[H3Memory] memory-bank mode: no keyframe, "
-              f"{bank_pinned} pinned + {cap - min(bank_pinned, cap)} recent "
-              f"slot(s), {_jb_grid(bank_clip_frames)}f clips. Needs a ref2va "
-              f"checkpoint.", flush=True)
+        if continuity == "first_frame":
+            print("[H3Memory] first_frame mode: memory-bank reference rows are "
+                  "bypassed; continuity comes from the fl2va previous-frame "
+                  "handoff.", flush=True)
+        else:
+            _bank_suffix = (
+                "active ref2va reference-row path."
+                if not _is_fl else
+                "configured, but fl2va ignores reference-row bank slots unless "
+                "you switch to ref2va."
+            )
+            print(f"[H3Memory] memory-bank mode: no keyframe, "
+                  f"{bank_pinned} pinned + {cap - min(bank_pinned, cap)} recent "
+                  f"slot(s), {_jb_grid(bank_clip_frames)}f clips; {_bank_suffix}",
+                  flush=True)
 
         # KursatAs 2026-08-18 06:24: shot_cache is a CPU/disk prefix cache,
         # not a GPU cache. A cache hit restores the exact sampler state after
@@ -3804,6 +3826,12 @@ class H3MultishotMemorySampler:
                         _h3_safe_rmtree(_cache_dir, _root)
                         print("[H3Memory] shot_cache: cleared %s"
                               % _cache_dir, flush=True)
+                        _h3_notify(
+                            "Shot cache: rebuilding cache for this "
+                            "configuration; existing compatible prefixes are "
+                            "ignored for this run.",
+                            "info", "H3 shot cache", tag="H3Memory",
+                            timeout_ms=4000)
                     os.makedirs(_cache_dir, exist_ok=True)
                     _cache_write_enabled = True
                     if _cache_mode != "rebuild_cache":
@@ -3869,6 +3897,15 @@ class H3MultishotMemorySampler:
                                 print("[H3Memory] shot_cache: ignored "
                                       "unreadable prefix %d (%s)"
                                       % (_idx, _e), flush=True)
+                        if _cache_start <= 0:
+                            print("[H3Memory] shot_cache: no compatible prefix "
+                                  "found; rendering from clip 1.",
+                                  flush=True)
+                            _h3_notify(
+                                "Shot cache: no compatible prefix found; "
+                                "rendering from clip 1.",
+                                "info", "H3 shot cache", tag="H3Memory",
+                                timeout_ms=4000)
                 except Exception as _e:
                     _cache_enabled = False
                     _cache_write_enabled = False
@@ -4125,7 +4162,7 @@ class H3MultishotMemorySampler:
                             "between the two frames. Control drift with prompt "
                             "wording instead.")
                     print("[H3Memory] " + _msg, flush=True)
-                    _h3_notify(_msg, "warning", "H3 end_anchor ignored",
+                    _h3_notify(_msg, "info", "H3 end_anchor note",
                                tag="H3Memory")
             elif end_anchor and _house_frame is not None and si > 0:
                 # return-to-house DOUBLE pin at the shot's tail: closes the
@@ -4876,7 +4913,7 @@ class H3MultishotMemorySampler:
                             "from the previous last frame (MAD %.4f). This "
                             "usually means the wrong checkpoint is loaded; "
                             "fl2va is required." % _m0)
-                    _h3_notify(_msg, "warning", "H3 handover ignored",
+                    _h3_notify(_msg, "warning", "H3 first_frame risk",
                                tag="H3Memory")
 
             if _dbg_pins:
