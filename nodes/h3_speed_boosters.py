@@ -32,12 +32,12 @@ _PACKS = {
 }
 
 try:
-    from .h3_notify import h3_notify as _h3_notify
+    from .h3_notify import h3_warning as _h3_warning
 except Exception:
     try:
-        from h3_notify import h3_notify as _h3_notify
+        from h3_notify import h3_warning as _h3_warning
     except Exception:
-        def _h3_notify(*_args, **_kwargs):
+        def _h3_warning(*_args, **_kwargs):
             return False
 
 
@@ -48,8 +48,7 @@ def _apply(model, class_name, url, label, **kw):
         _msg = ("%s is ON but its pack is not installed - rendering at normal "
                 "speed. Install: %s" % (label, url))
         print("[H3SpeedBoosters] " + _msg, flush=True)
-        _h3_notify(_msg, "warning", "H3 optional speed booster",
-                   tag="H3SpeedBoosters")
+        _h3_warning(_msg, topic="speed_booster", tag="H3SpeedBoosters")
         return model
 
     def _bypass(reason):
@@ -57,8 +56,7 @@ def _apply(model, class_name, url, label, **kw):
                 "speed for this booster. Check/update its pack: %s"
                 % (label, reason, url))
         print("[H3SpeedBoosters] " + _msg, flush=True)
-        _h3_notify(_msg, "warning", "H3 optional speed booster",
-                   tag="H3SpeedBoosters")
+        _h3_warning(_msg, topic="speed_booster", tag="H3SpeedBoosters")
         return model
 
     try:
@@ -178,8 +176,7 @@ class H3SpeedBoosters:
                     "Spectrum alone and can visibly damage people. Prefer "
                     "enabling only one.")
             print("[H3SpeedBoosters] WARNING: " + _msg, flush=True)
-            _h3_notify(_msg, "warning", "H3 speed/quality risk",
-                       tag="H3SpeedBoosters")
+            _h3_warning(_msg, topic="speed_quality", tag="H3SpeedBoosters")
         if easycache:
             model = _apply(model, "EasyCache",
                            "built into ComfyUI - update if missing",

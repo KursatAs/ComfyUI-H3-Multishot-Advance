@@ -15,13 +15,22 @@ import re
 _H3_DEFAULT_SEED = 0
 
 try:
-    from .h3_notify import h3_notify as _h3_notify
+    from .h3_notify import (
+        h3_error as _h3_error,
+        h3_info as _h3_info,
+        h3_warning as _h3_warning,
+    )
 except Exception:
     try:
-        from h3_notify import h3_notify as _h3_notify
+        from h3_notify import (
+            h3_error as _h3_error,
+            h3_info as _h3_info,
+            h3_warning as _h3_warning,
+        )
     except Exception:
-        def _h3_notify(*_args, **_kwargs):
+        def _h3_noop(*_args, **_kwargs):
             return False
+        _h3_info = _h3_warning = _h3_error = _h3_noop
 
 
 def _h3_fail(message, exc_type=RuntimeError, title="H3 Multishot", tag=None):
@@ -31,7 +40,7 @@ def _h3_fail(message, exc_type=RuntimeError, title="H3 Multishot", tag=None):
     not live only in the console or ComfyUI queue error panel during long runs.
     """
     msg = str(message)
-    _h3_notify(msg, "error", title, tag=tag)
+    _h3_error(msg, title=title, tag=tag)
     return exc_type(msg)
 
 
@@ -3421,16 +3430,15 @@ class H3MultishotMemorySampler:
                         "the intended hand-off mode for this checkpoint. "
                         "Reference-row features are not required for this path.")
                 print("[H3Memory] " + _msg, flush=True)
-                _h3_notify(_msg, "info", "H3 fl2va quality path",
-                           tag="H3Memory", timeout_ms=6000)
+                _h3_info(_msg, topic="fl2va_quality",
+                         tag="H3Memory", timeout_ms=6000)
             elif continuity == "first_frame" and _is_ref:
                 _msg = ("continuity=first_frame hands the previous last frame "
                         "over as the fl2va task, but a ref2va checkpoint is "
                         "loaded. The hand-off will be weak (soft keyframe "
                         "only). Load an fl2va checkpoint.")
                 print("[H3Memory] WARNING: " + _msg, flush=True)
-                _h3_notify(_msg, "warning", "H3 mode/checkpoint notice",
-                           tag="H3Memory")
+                _h3_warning(_msg, topic="checkpoint", tag="H3Memory")
             elif continuity != "first_frame" and _is_fl and _ref_rows_expected:
                 _msg = ("fl2va checkpoint loaded: this is the quality/first-"
                         "frame path, but the current workflow also enables "
@@ -3440,8 +3448,7 @@ class H3MultishotMemorySampler:
                         "continuity=first_frame for the fl2va path, or load "
                         "ref2va when you want reference-row conditioning.")
                 print("[H3Memory] WARNING: " + _msg, flush=True)
-                _h3_notify(_msg, "warning", "H3 mode/checkpoint notice",
-                           tag="H3Memory")
+                _h3_warning(_msg, topic="checkpoint", tag="H3Memory")
             if start_image is not None and _is_fl:
                 # Reported from the field: start_image connected, fl2va loaded,
                 # continuity=first_frame, and shot 1 does not open on the
@@ -3457,8 +3464,7 @@ class H3MultishotMemorySampler:
                         "(N+1 stills for N shots). To use start_image as an "
                         "identity reference, load a ref2va checkpoint.")
                 print("[H3Memory] NOTE: " + _msg, flush=True)
-                _h3_notify(_msg, "info", "H3 start_image note",
-                           tag="H3Memory")
+                _h3_info(_msg, topic="start_image", tag="H3Memory")
 
         bank = _H3ChainBank(num_fix=bank_pinned, max_size=cap)
         frames_parts, audio_parts = [], []
@@ -3553,7 +3559,7 @@ class H3MultishotMemorySampler:
                         "after every shot has been paid for. Set output_scale "
                         "to %.2f or lower, or turn the upscaler off." % _limit)
                 print("[H3Memory] WARNING: " + _msg, flush=True)
-                _h3_notify(_msg, "warning", "H3 RAM risk", tag="H3Memory")
+                _h3_warning(_msg, topic="ram", tag="H3Memory")
         sr = None
         _cg_ref = None
         _CG_WIN = 24
@@ -3627,8 +3633,7 @@ class H3MultishotMemorySampler:
                     "context_pin latent before sampling. Default remains off; "
                     "switch to flatten or off if VRAM climbs.")
             print("[H3Memory] WARNING: " + _msg, flush=True)
-            _h3_notify(_msg, "warning", "H3 experimental setting",
-                       tag="H3Memory")
+            _h3_warning(_msg, topic="experimental", tag="H3Memory")
 
         if bank_pinned == 0 and n > 4:
             _msg = ("bank_pinned=0 on a %d-shot chain. With no pinned slot "
@@ -3638,8 +3643,7 @@ class H3MultishotMemorySampler:
                     "2026-08-11). Set bank_pinned=1, and keep chains short if "
                     "the voice matters." % n)
             print("[H3Memory] WARNING: " + _msg, flush=True)
-            _h3_notify(_msg, "warning", "H3 continuity risk",
-                       tag="H3Memory")
+            _h3_warning(_msg, topic="continuity", tag="H3Memory")
         if continuity == "first_frame":
             print("[H3Memory] first_frame mode: memory-bank reference rows are "
                   "bypassed; continuity comes from the fl2va previous-frame "
@@ -3826,11 +3830,11 @@ class H3MultishotMemorySampler:
                         _h3_safe_rmtree(_cache_dir, _root)
                         print("[H3Memory] shot_cache: cleared %s"
                               % _cache_dir, flush=True)
-                        _h3_notify(
+                        _h3_info(
                             "Shot cache: rebuilding cache for this "
                             "configuration; existing compatible prefixes are "
                             "ignored for this run.",
-                            "info", "H3 shot cache", tag="H3Memory",
+                            topic="shot_cache", tag="H3Memory",
                             timeout_ms=4000)
                     os.makedirs(_cache_dir, exist_ok=True)
                     _cache_write_enabled = True
@@ -3887,11 +3891,11 @@ class H3MultishotMemorySampler:
                                 print("[H3Memory] shot_cache HIT: restored "
                                       "%d/%d completed shot(s); %s"
                                       % (_idx, n, _resume_msg), flush=True)
-                                _h3_notify(
+                                _h3_info(
                                     "Shot cache restored %d/%d clip(s); %s"
                                     % (_idx, n, _resume_msg),
-                                    "info", "H3 Memory Sampler",
-                                    tag="H3Memory", timeout_ms=4000)
+                                    topic="memory_sampler", tag="H3Memory",
+                                    timeout_ms=4000)
                                 break
                             except Exception as _e:
                                 print("[H3Memory] shot_cache: ignored "
@@ -3901,10 +3905,10 @@ class H3MultishotMemorySampler:
                             print("[H3Memory] shot_cache: no compatible prefix "
                                   "found; rendering from clip 1.",
                                   flush=True)
-                            _h3_notify(
+                            _h3_info(
                                 "Shot cache: no compatible prefix found; "
                                 "rendering from clip 1.",
-                                "info", "H3 shot cache", tag="H3Memory",
+                                topic="shot_cache", tag="H3Memory",
                                 timeout_ms=4000)
                 except Exception as _e:
                     _cache_enabled = False
@@ -3916,8 +3920,9 @@ class H3MultishotMemorySampler:
             shot_seed = (seed + si) if seed_per_shot else seed
             # KursatAs 2026-08-17 10:25: short per-clip toast confirms the
             # browser notification bridge is alive without requiring an error.
-            _h3_notify(f"Clip {si + 1}/{n} running", "info",
-                       "H3 Memory Sampler", tag="H3Memory", timeout_ms=3000)
+            _h3_info(f"Clip {si + 1}/{n} running",
+                     topic="memory_sampler", tag="H3Memory",
+                     timeout_ms=3000)
             if two_pass_upscale:
                 latent, frame_count = mmh3._empty_av_latent(
                     _tp_w1, _tp_h1, frames_per_shot)
@@ -4111,8 +4116,8 @@ class H3MultishotMemorySampler:
                         "mid-render. Use continuity=context_pin (better, and "
                         "it is what that pack is for), or first_frame, or "
                         "remove that pack to use seamless_tail.")
-                    _h3_notify(_msg, "error", "H3 seamless_tail conflict",
-                               tag="H3Memory")
+                    _h3_error(_msg, topic="seamless_tail_conflict",
+                              tag="H3Memory")
                     raise ValueError(_msg)
                 if si == 1 and _mc_status["registered"]:
                     # KursatAs 2026-08-17 09:54: a registered Motion-Context
@@ -4122,16 +4127,16 @@ class H3MultishotMemorySampler:
                             "but its layout patch is not active; using H3's "
                             "interior-keyframe patch.")
                     print("[H3Memory] " + _msg, flush=True)
-                    _h3_notify(_msg, "info", "H3 seamless_tail", tag="H3Memory",
-                               timeout_ms=7000)
+                    _h3_info(_msg, topic="seamless_tail", tag="H3Memory",
+                             timeout_ms=7000)
                 _ik_ok, _ik_msg = ensure_interior_keyframes(verbose=False)
                 if not _ik_ok:
                     _msg = (
                         "continuity=seamless_tail needs interior keyframe "
                         f"anchors and the layout patch failed: {_ik_msg}. "
                         "Use continuity=first_frame or context_pin instead.")
-                    _h3_notify(_msg, "error", "H3 seamless_tail unavailable",
-                               tag="H3Memory")
+                    _h3_error(_msg, topic="seamless_tail_unavailable",
+                              tag="H3Memory")
                     raise ValueError(_msg)
                 for j in range(_TAIL_K + 1):
                     pi = -(1 + 4 * (_TAIL_K - j))          # -9, -5, -1
@@ -4162,8 +4167,7 @@ class H3MultishotMemorySampler:
                             "between the two frames. Control drift with prompt "
                             "wording instead.")
                     print("[H3Memory] " + _msg, flush=True)
-                    _h3_notify(_msg, "info", "H3 end_anchor note",
-                               tag="H3Memory")
+                    _h3_info(_msg, topic="end_anchor", tag="H3Memory")
             elif end_anchor and _house_frame is not None and si > 0:
                 # return-to-house DOUBLE pin at the shot's tail: closes the
                 # compounding push-in creep so the next join inherits a tail
@@ -4326,8 +4330,7 @@ class H3MultishotMemorySampler:
                            if _fork else
                            " If you installed a fork instead, note that forks "
                            "may leave that node id to upstream on purpose."))
-                    _h3_notify(_msg, "error", "H3 context_pin missing",
-                               tag="H3Memory")
+                    _h3_error(_msg, topic="context_pin", tag="H3Memory")
                     raise RuntimeError(_msg)
                 # KursatAs - 2026-08-15 18:52: allow context_pin with Sol-Attn.
                 _h3_motion_context_allow_solattn_layout(_mc_cls)
@@ -4913,8 +4916,7 @@ class H3MultishotMemorySampler:
                             "from the previous last frame (MAD %.4f). This "
                             "usually means the wrong checkpoint is loaded; "
                             "fl2va is required." % _m0)
-                    _h3_notify(_msg, "warning", "H3 first_frame risk",
-                               tag="H3Memory")
+                    _h3_warning(_msg, topic="first_frame", tag="H3Memory")
 
             if _dbg_pins:
                 # bracket adherence: the regenerated head frames should
