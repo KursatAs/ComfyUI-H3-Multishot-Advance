@@ -7,9 +7,9 @@ once and saved workflows open as a wall of red boxes.
 """
 import logging
 
-from .nodes import h3_multishot_utils as _core
+from .nodes import h3_multishot_sampler as _core
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 VERSION = __version__
 WEB_DIRECTORY = "web/js"
 NODE_CLASS_MAPPINGS = {}
@@ -70,7 +70,8 @@ def _merge(modname):
 _register(_core.NODE_CLASS_MAPPINGS, _core.NODE_DISPLAY_NAME_MAPPINGS)
 
 
-for _m in ("h3_cartridge",       # portable character cartridges
+for _m in ("h3_multiloader",     # complete MiniMax-H3 stack loader
+           "h3_cartridge",       # portable character cartridges
            "h3_episode_tools",   # H3Controls
            "h3_speed_boosters"): # switch panel for optional accelerators
     _merge(_m)

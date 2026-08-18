@@ -67,7 +67,7 @@ def _rate_gb_per_mcell(model):
         name = getattr(getattr(model, "model", None), "__class__", None)
         # ModelPatcher does not carry the file name; the reserve system does,
         # via its cache keys - use those to pick a measured rate.
-        from .h3_multishot_utils import _auto_cache_load, _model_family
+        from .h3_model_runtime import _auto_cache_load, _model_family
         import torch
         dev = torch.cuda.get_device_name(0)
         rates = []

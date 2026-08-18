@@ -1,7 +1,7 @@
 [project]
 name = "ComfyUI-H3-Multishot-Advance"
 description = "Advanced multi-shot chaining for MiniMax-H3 audio+video with resumable cache, continuity controls, and unified model loading."
-version = "1.0.0"
+version = "1.0.1"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 
