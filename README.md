@@ -63,6 +63,30 @@ JSON is also accepted:
 When `shot_count` is higher than the number of prompt blocks, the sampler keeps
 the existing fallback behavior and reuses the previous prompt for missing shots.
 
+## Known issues / current workaround
+
+### Silent shots may invent speech unless speech intent is explicit
+
+MiniMax-H3 can sometimes generate random spoken audio in a shot that was meant
+to be silent, especially when a previous shot carried a voice reference or
+`self_anchor_voice` is enabled. The sampler now guards silent shots by keeping
+voice/audio references out of conditioning unless the shot prompt clearly asks
+for foreground speech.
+
+Temporary prompt workaround: mark speaking shots explicitly:
+
+```text
+[dialogue]
+He says: "I finally found it."
+```
+
+For shots that should not speak, mark them explicitly as silent:
+
+```text
+[silent]
+No dialogue. No speech. Ambient sound only.
+```
+
 ## Shot cache
 
 `shot_cache` defaults to `use_cache`.

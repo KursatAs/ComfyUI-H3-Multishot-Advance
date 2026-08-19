@@ -42,17 +42,19 @@ def h3_build_shot_conditioning(clip, node_helpers, mmh3, video_vae, prompt,
                                keyframes, reference_subjects,
                                two_pass_upscale, width, height, frame_count,
                                join_anchor_noise, shot_seed, pass1_width=None,
-                               pass1_height=None):
+                               pass1_height=None, speech_active=True):
     if kf_vision:
         tokens = clip.tokenize(prompt, images=kf_vision)
     elif ref_items:
         n_img = sum(1 for item in ref_items if item["type"] == "image")
         groups = _parse_ref_groups(reference_subjects, n_img)
+        # KursatAs 2026-08-19 04:45: pass per-shot speech state into automatic
+        # subject_definitions so silent shots are not described as speaking.
         subject_defs = _subject_defs(
             n_img,
             sum(1 for item in ref_items if item["type"] == "audio"),
             sum(1 for item in ref_items if item["type"] == "video"),
-            image_subjects=groups)
+            image_subjects=groups, speaking=speech_active)
         if subject_defs:
             if si == 1:
                 print("[H3Memory] subject_definitions added for %d reference "

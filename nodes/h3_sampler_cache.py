@@ -22,6 +22,9 @@ def h3_build_sampler_cache_base(
     return {
         "version": _H3_SHOT_CACHE_VERSION,
         "node": "H3MultishotMemorySampler",
+        # KursatAs 2026-08-19 04:45: speech guard changes conditioning refs;
+        # old prefix caches were built with voice/audio always riding along.
+        "speech_guard": 1,
         # KursatAs 2026-08-18 07:49: Keep total shot_count out of the base key
         # so a 2-shot cache can resume when the user extends the same project
         # to 3+ shots. Prefix keys still include the exact prior prompts.

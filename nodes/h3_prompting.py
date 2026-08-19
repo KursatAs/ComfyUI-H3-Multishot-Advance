@@ -33,7 +33,7 @@ def _parse_ref_groups(spec, n_image):
 
 
 def _subject_defs(n_image, n_audio, n_video, speaker="the person",
-                  image_subjects=None):
+                  image_subjects=None, speaking=True):
     """Official H3 ref2va subject_definitions + retention_analysis block.
 
     The tokenizer emits reference items as bare "<Picture k>: ",
@@ -60,14 +60,19 @@ def _subject_defs(n_image, n_audio, n_video, speaker="the person",
         return ""
     subs = list(image_subjects or [])
     n_sub = max(subs) if subs else 1
+    # KursatAs 2026-08-19 04:45: silent shots must not receive a hidden
+    # "Subject is speaking" instruction from auto subject_definitions.
+    if speaking:
+        subject_1 = "<Subject 1> is %s speaking in this scene." % speaker
+    else:
+        subject_1 = ("<Subject 1> is %s appearing in this scene without "
+                     "speaking." % speaker)
     if n_sub <= 1:
-        d = ["subject_definitions:",
-             "<Subject 1> is %s speaking in this scene." % speaker]
+        d = ["subject_definitions:", subject_1]
     else:
         # Only <Subject 1> is described as speaking; H3's voice conditioning is
         # single-speaker and naming several speakers competes for the audio lane.
-        d = ["subject_definitions:",
-             "<Subject 1> is %s speaking in this scene." % speaker]
+        d = ["subject_definitions:", subject_1]
         for s in range(2, n_sub + 1):
             d.append("<Subject %d> is a different individual who also appears "
                      "in this scene." % s)
@@ -100,9 +105,19 @@ def _subject_defs(n_image, n_audio, n_video, speaker="the person",
                  "framing, camera distance, room contents and colour "
                  "temperature of <Video %d>." % (k, k))
     for j in range(1, n_audio + 1):
-        d.append("<Audio %d> is the synchronized audio track of <Video %d>, "
-                 "containing <Subject 1>'s speaking voice." % (j, j))
-        r.append("<Audio %d>: reference - the target audio references the "
-                 "voice timbre in <Audio %d> so <Subject 1> speaks with the "
-                 "same voice." % (j, j))
+        # KursatAs 2026-08-19 04:45: audio ref text now follows speech guard.
+        # Speaking shots describe voice timbre; silent shots describe ambience
+        # only, so the prompt text does not reintroduce dialogue.
+        if speaking:
+            d.append("<Audio %d> is a reference audio track containing "
+                     "<Subject 1>'s speaking voice and scene ambience." % j)
+            r.append("<Audio %d>: reference - the target audio references "
+                     "the voice timbre in <Audio %d> so <Subject 1> speaks "
+                     "with the same voice." % (j, j))
+        else:
+            d.append("<Audio %d> is reference environmental audio, not "
+                     "dialogue or voiceover." % j)
+            r.append("<Audio %d>: reference - the target audio may preserve "
+                     "ambient sound texture, but <Subject 1> remains "
+                     "non-speaking." % j)
     return "\n".join(d) + "\n" + "\n".join(r)

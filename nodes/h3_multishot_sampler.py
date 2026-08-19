@@ -154,6 +154,20 @@ try:
 except Exception:
     from h3_sampler_conditioning import h3_build_shot_conditioning
 
+# KursatAs 2026-08-19 04:45: speech guard is sampler-level, not writer-level.
+# Silent shots keep visual references but must not receive old voice/audio refs
+# that can make H3 invent random-language dialogue.
+try:
+    from .h3_speech_guard import (
+        h3_apply_no_speech_guard,
+        h3_detect_foreground_speech,
+    )
+except Exception:
+    from h3_speech_guard import (
+        h3_apply_no_speech_guard,
+        h3_detect_foreground_speech,
+    )
+
 try:
     from .h3_sampler_runtime import (
         h3_apply_context_pin,
@@ -576,6 +590,13 @@ class H3MultishotMemorySampler:
 
         for si, prompt in enumerate(shots[_cache_start:], start=_cache_start):
             shot_seed = (seed + si) if seed_per_shot else seed
+            # KursatAs 2026-08-19 04:45: decide per-shot whether foreground
+            # speech is explicitly requested. Defaulting to silent is deliberate
+            # because the failure mode is invented speech when the prompt only
+            # asked for action/ambience.
+            speech_active, speech_reason = h3_detect_foreground_speech(prompt)
+            if not speech_active:
+                prompt = h3_apply_no_speech_guard(prompt)
             # KursatAs 2026-08-17 10:25: short per-clip toast confirms the
             # browser notification bridge is alive without requiring an error.
             _h3_info(f"Clip {si + 1}/{n} running",
@@ -594,17 +615,19 @@ class H3MultishotMemorySampler:
                 mmh3, video_vae, audio_vae, si, width, height,
                 anchor_frames, start_image, ref_image_items, ref_image_blocks,
                 voice_block, reference_video, reference_video_audio,
-                continuity, bank)
+                continuity, bank, speech_active=speech_active)
             prompt, kf_vision, keyframes = h3_build_shot_keyframes(
                 mmh3, si, prompt, continuity, keyframe_images,
                 state.last_tail,
                 width, height, frame_count, frames_per_shot, _TAIL_K,
                 handoff_depth, end_anchor, state.house_frame, state.dbg_pins)
 
-            print("[H3Memory] shot %d/%d (%df @ %dx%d) | bank %s%s"
+            print("[H3Memory] shot %d/%d (%df @ %dx%d) | bank %s%s | "
+                  "speech %s (%s)"
                   % (si + 1, n, frames_per_shot, width, height, bank.describe(),
                      " + identity ref" if (start_image is not None
-                                           and anchor_frames > 0) else ""),
+                                           and anchor_frames > 0) else "",
+                     "on" if speech_active else "off", speech_reason),
                   flush=True)
 
             h3_evict_dit_before_text_encoder(si)
@@ -614,7 +637,8 @@ class H3MultishotMemorySampler:
                 ref_items, ref_blocks, kf_vision, keyframes,
                 reference_subjects, two_pass_upscale, width, height,
                 frame_count, join_anchor_noise, shot_seed,
-                pass1_width=_tp_w1, pass1_height=_tp_h1)
+                pass1_width=_tp_w1, pass1_height=_tp_h1,
+                speech_active=speech_active)
 
             # context_pin: reuse the Motion-Context node as a library via
             # the registry - OUR features (bank, colour levels, join fx)
@@ -643,10 +667,16 @@ class H3MultishotMemorySampler:
             noise = ncs.RandomNoise().get_noise(shot_seed)[0]
             # payload signature: continuity mode + position + bank/spine
             # decide the conditioning payload, and with it the real pool
+            # KursatAs 2026-08-19 04:45: speech guard changes the number and
+            # type of audio refs, so reserve/cache payload signatures must not
+            # collapse silent and speaking shots into the same bucket.
+            _audio_ref_count = sum(
+                1 for item in ref_items if item["type"] == "audio")
             _auto_set_payload(
-                "%s%d_k%dr%d%s%s" % (
+                "%s%d_k%dr%da%d%s%s%s" % (
                     continuity[:4], 1 if si > 0 else 0,
-                    len(keyframes), len(ref_blocks),
+                    len(keyframes), len(ref_blocks), _audio_ref_count,
+                    "sp" if speech_active else "sl",
                     "s" if _spine is not None else "",
                     "2p" if two_pass_upscale else ""))
             _mb = _auto_measure_begin()
@@ -700,9 +730,14 @@ class H3MultishotMemorySampler:
                 imgs, wav, sr, continuity, si, state.last_tail,
                 state.dbg_pins, handoff_depth, state.ho_wav_tail)
 
-            if si == 0 and self_anchor_voice and voice_block is None:
-                # THE self-anchor: shot 1's own rendered voice becomes the
-                # reference for every later shot. The bank carries voice as
+            if self_anchor_voice and voice_block is None and speech_active:
+                # KursatAs 2026-08-19 04:45: self-anchor now starts from the
+                # first speaking shot, not blindly shot 1. A silent shot can
+                # contain ambience, but that must never become the chain voice.
+                # THE self-anchor: the first rendered SPEAKING shot becomes
+                # the reference for later speaking shots. Silent shots must
+                # not seed the voice anchor with ambience, and they must not
+                # receive that anchor back as conditioning. The bank carries voice as
                 # part of a video_audio slot that keeps rolling; this pins
                 # the ORIGINAL performance and never moves. The decoded audio
                 # is already at the VAE's rate and stereo - just trim and
@@ -714,9 +749,10 @@ class H3MultishotMemorySampler:
                 _avz = audio_vae.encode(_aw.movedim(1, -1))
                 voice_block = {"kind": "audio", "ref_audio_t": _avz.shape[-1],
                                "audio_latent": _avz}
-                print("[H3Memory] self-anchor: shot 1's voice (%.1fs) is now "
+                print("[H3Memory] self-anchor: shot %d voice (%.1fs) is now "
                       "<Audio 1> for the remaining %d shot(s)."
-                      % (_aw.shape[-1] / sr, n - 1), flush=True)
+                      % (si + 1, _aw.shape[-1] / sr, max(0, n - si - 1)),
+                      flush=True)
             # store this shot as a bank slot: centre clip + the audio under it
             clip_imgs, clip_start = _jb_centre_clip(imgs, bank_clip_frames)
             if bank_ref_noise > 0:

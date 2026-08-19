@@ -9,7 +9,8 @@ import logging
 
 from .nodes import h3_multishot_sampler as _core
 
-__version__ = "1.0.1"
+# KursatAs 2026-08-19 06:07: keep runtime package version aligned with pyproject.
+__version__ = "1.0.2"
 VERSION = __version__
 WEB_DIRECTORY = "web/js"
 NODE_CLASS_MAPPINGS = {}

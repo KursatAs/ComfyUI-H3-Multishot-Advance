@@ -37,7 +37,8 @@ def _h3_fail(message, exc_type=RuntimeError, title="H3 Multishot", tag=None):
 def h3_build_shot_refs(mmh3, video_vae, audio_vae, si, width, height,
                        anchor_frames, start_image, ref_image_items,
                        ref_image_blocks, voice_block, reference_video,
-                       reference_video_audio, continuity, bank):
+                       reference_video_audio, continuity, bank,
+                       speech_active=True):
     ref_items, ref_blocks = [], []
 
     # operator-supplied refs go FIRST and never move: the bank grows from shot
@@ -47,7 +48,9 @@ def h3_build_shot_refs(mmh3, video_vae, audio_vae, si, width, height,
     for item, block in zip(ref_image_items, ref_image_blocks):
         ref_items.append(item)
         ref_blocks.append(block)
-    if voice_block is not None:
+    # KursatAs 2026-08-19 04:45: voice identity remains stored in voice_block,
+    # but it only enters conditioning for shots that explicitly speak.
+    if voice_block is not None and speech_active:
         ref_items.append({"type": "audio"})
         ref_blocks.append(voice_block)
 
@@ -72,15 +75,17 @@ def h3_build_shot_refs(mmh3, video_vae, audio_vae, si, width, height,
     #
     # 2.2.4: a user-supplied reference_video is prepended as just another
     # (frames, audio) pair, so it travels this exact proven path instead of a
-    # parallel one. H3 pairs every video reference with an audio reference, so
-    # silence is synthesised when the user has none - stereo, because the ref
-    # audio encoder wants two channels, and any rate is fine since
-    # _encode_ref_audio resamples.
+    # parallel one. Speaking shots pair video references with audio references;
+    # silent shots deliberately keep them video-only so old voice/audio cannot
+    # trigger invented dialogue.
     extra_clips = []
     if reference_video is not None and int(reference_video.shape[0]):
-        rv_audio = reference_video_audio
+        # KursatAs 2026-08-19 04:45: for silent shots, keep the visual
+        # reference clip but withhold its audio so it cannot act as dialogue
+        # conditioning.
+        rv_audio = reference_video_audio if speech_active else None
         rv_n = int(reference_video.shape[0])
-        if rv_audio is None:
+        if rv_audio is None and speech_active:
             import torch as _t
             sr = 32000
             dur = rv_n / float(mmh3.FPS)
@@ -91,9 +96,12 @@ def h3_build_shot_refs(mmh3, video_vae, audio_vae, si, width, height,
             if si == 1:
                 print("[H3Memory] reference_video: %d frame(s), no audio "
                       "supplied - pairing with silence" % rv_n, flush=True)
-        elif si == 1:
+        elif rv_audio is not None and si == 1:
             print("[H3Memory] reference_video: %d frame(s) + audio" % rv_n,
                   flush=True)
+        elif not speech_active and reference_video_audio is not None and si == 1:
+            print("[H3Memory] reference_video: %d frame(s), audio withheld "
+                  "by speech guard for this silent shot" % rv_n, flush=True)
         if si == 1 and rv_n > 64:
             print("[H3Memory] reference_video is %d frames; it is "
                   "subsampled to 2 fps but that is still a lot of reference "
@@ -112,14 +120,20 @@ def h3_build_shot_refs(mmh3, video_vae, audio_vae, si, width, height,
         fr = mmh3._resize(clip_frames, cw, ch, "disabled")
         fr = fr[:_jb_grid(fr.shape[0])]
         z = video_vae.encode(fr)
-        # KursatAs 2026-08-15 18:37: route through ref-audio compat.
-        a_lat, a_t = _encode_ref_audio_compat(mmh3, audio_vae, clip_audio)
-        # the soundtrack takes its own <Audio j>, emitted before <Video k>
-        ref_items.append({"type": "audio"})
+        a_lat, a_t = (None, 0)
+        # KursatAs 2026-08-19 04:45: bank clips become video_audio only for
+        # speaking shots. Silent shots use kind=video to preserve continuity
+        # without injecting previous speech.
+        if speech_active and clip_audio is not None:
+            # KursatAs 2026-08-15 18:37: route through ref-audio compat.
+            a_lat, a_t = _encode_ref_audio_compat(mmh3, audio_vae, clip_audio)
+            # the soundtrack takes its own <Audio j>, emitted before <Video k>
+            ref_items.append({"type": "audio"})
         idx = list(range(0, fr.shape[0], mmh3.FPS // 2))
         ref_items.append({"type": "video", "data": fr[idx],
                           "timestamps": [i / 2.0 for i in range(len(idx))]})
-        ref_blocks.append({"kind": "video_audio", "latent_t": z.shape[2],
+        ref_blocks.append({"kind": "video_audio" if a_t else "video",
+                           "latent_t": z.shape[2],
                            "latent_h": ch // 16, "latent_w": cw // 16,
                            "ref_audio_t": a_t, "latent": z,
                            "audio_latent": a_lat})
