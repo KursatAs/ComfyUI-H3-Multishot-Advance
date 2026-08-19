@@ -138,6 +138,29 @@ class H3MultiLoader:
             raise _h3_fail("Audio VAE could not be loaded: %s" % e,
                            RuntimeError, "H3 audio VAE missing",
                            tag="H3MultiLoader")
+        # KursatAs 2026-08-19 19:22: project cache must identify the model
+        # stack by stable names after a ComfyUI restart; runtime object ids are
+        # deliberately not usable for long-lived projects.
+        for obj, attrs in (
+            (clip, {
+                "h3_clip_name": clip_name,
+                "h3_clip_type": clip_type,
+                "h3_mmproj_name": mmproj_name,
+            }),
+            (video_vae, {
+                "h3_vae_name": video_vae_name,
+                "h3_vae_role": "video",
+            }),
+            (audio_vae, {
+                "h3_vae_name": audio_vae_name,
+                "h3_vae_role": "audio",
+            }),
+        ):
+            for key, value in attrs.items():
+                try:
+                    setattr(obj, key, str(value))
+                except Exception:
+                    pass
         print("[H3MultiLoader] loaded model=%r, clip=%r, video_vae=%r, "
               "audio_vae=%r" % (model_name, clip_name, video_vae_name,
                                 audio_vae_name), flush=True)

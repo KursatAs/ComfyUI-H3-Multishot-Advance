@@ -18,10 +18,20 @@ def h3_build_sampler_cache_base(
         upscale_model_name, master_normalize, pin_frames, pin_noise,
         pin_renorm, reference_subjects, audio_pin_frames, model, clip,
         video_vae, audio_vae, start_image, keyframe_images, reference_images,
-        guide_audio, voice_ref, reference_video, reference_video_audio):
+        guide_audio, voice_ref, reference_video, reference_video_audio,
+        project=None):
+    project_mode = (
+        isinstance(project, dict)
+        and project.get("type") == "H3_ADVANCE_PROJECT"
+    )
     return {
         "version": _H3_SHOT_CACHE_VERSION,
         "node": "H3MultishotMemorySampler",
+        # KursatAs 2026-08-19 19:14: project cache must survive a ComfyUI
+        # restart, so volatile runtime object ids are excluded in project
+        # mode. Compatibility is still guarded by checkpoint names, settings,
+        # prompt-prefix keys, and input tensor fingerprints.
+        "project_cache": 1 if project_mode else 0,
         # KursatAs 2026-08-19 04:45: speech guard changes conditioning refs;
         # old prefix caches were built with voice/audio always riding along.
         "speech_guard": 1,
@@ -67,13 +77,23 @@ def h3_build_sampler_cache_base(
         "audio_pin_frames": int(audio_pin_frames),
         "model": {
             "class": type(model).__name__,
-            "id": id(model),
             "checkpoint": str(getattr(
                 getattr(model, "model", None), "h3_checkpoint_name", "") or ""),
+            **({} if project_mode else {"id": id(model)}),
         },
-        "clip": {"class": type(clip).__name__, "id": id(clip)},
-        "video_vae": {"class": type(video_vae).__name__, "id": id(video_vae)},
-        "audio_vae": {"class": type(audio_vae).__name__, "id": id(audio_vae)},
+        "clip": {"class": type(clip).__name__,
+                 "name": str(getattr(clip, "h3_clip_name", "") or ""),
+                 "type": str(getattr(clip, "h3_clip_type", "") or ""),
+                 "mmproj": str(getattr(clip, "h3_mmproj_name", "") or ""),
+                 **({} if project_mode else {"id": id(clip)})},
+        "video_vae": {"class": type(video_vae).__name__,
+                      "name": str(getattr(video_vae, "h3_vae_name", "") or ""),
+                      "role": str(getattr(video_vae, "h3_vae_role", "") or ""),
+                      **({} if project_mode else {"id": id(video_vae)})},
+        "audio_vae": {"class": type(audio_vae).__name__,
+                      "name": str(getattr(audio_vae, "h3_vae_name", "") or ""),
+                      "role": str(getattr(audio_vae, "h3_vae_role", "") or ""),
+                      **({} if project_mode else {"id": id(audio_vae)})},
         "inputs": {
             "start_image": _h3_cache_fingerprint(start_image),
             "keyframe_images": _h3_cache_fingerprint(keyframe_images),

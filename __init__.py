@@ -9,8 +9,8 @@ import logging
 
 from .nodes import h3_multishot_sampler as _core
 
-# KursatAs 2026-08-19 06:07: keep runtime package version aligned with pyproject.
-__version__ = "1.0.2"
+# KursatAs 2026-08-19 21:05: keep runtime version aligned with the Project Node release.
+__version__ = "1.1.0"
 VERSION = __version__
 WEB_DIRECTORY = "web/js"
 NODE_CLASS_MAPPINGS = {}
@@ -21,13 +21,21 @@ __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS",
 
 
 def _advance_key(key):
-    return key if str(key).endswith("Advance") else f"{key}Advance"
+    key = str(key)
+    # KursatAs 2026-08-19 19:10: allow new Advance-native nodes to keep their
+    # exact public node id instead of receiving a second Advance suffix.
+    return key if (key.endswith("Advance")
+                   or key.startswith("H3Advance")) else f"{key}Advance"
 
 
 def _advance_display(key, name):
     name = str(name or key)
     if name.startswith("[deprecated]"):
         return None
+    # KursatAs 2026-08-19 19:10: H3 Advance Project is the first node whose
+    # source module already owns the exact Advance display name.
+    if name.startswith("H3 Advance "):
+        return name
     # KursatAs 2026-08-18 12:49: allow nodes to opt into an exact Advance
     # display name instead of the package-wide "H3 Advance ..." prefix.
     if name.endswith(" Advance"):
@@ -72,6 +80,7 @@ _register(_core.NODE_CLASS_MAPPINGS, _core.NODE_DISPLAY_NAME_MAPPINGS)
 
 
 for _m in ("h3_multiloader",     # complete MiniMax-H3 stack loader
+           "h3_project",         # project manifest and future cache workspace
            "h3_cartridge",       # portable character cartridges
            "h3_episode_tools",   # H3Controls
            "h3_speed_boosters"): # switch panel for optional accelerators

@@ -383,7 +383,10 @@ def h3_memory_sampler_input_types():
         "save_every_shot": ("BOOLEAN", {
             "default": True, "label_on": "write each shot as it decodes",
             "label_off": "off",
-            "tooltip": "Write EVERY shot to output/video/H3_SHOTS/ the "
+            # KursatAs 2026-08-19 20:37: keep the UI text aligned with the
+            # renamed Multishot Advance per-shot output folder.
+            "tooltip": "Write EVERY shot to "
+                       "output/video/multishot_advance_shots/ the "
                        "moment it decodes, in addition to the master. "
                        "Insurance for long chains: everything that fails "
                        "after the last shot - a mux OOM, a full disk, a "
@@ -546,6 +549,11 @@ def h3_memory_sampler_input_types():
                        "clips and continue from the first changed --- "
                        "prompt. rebuild_cache: ignore old cache, render "
                        "all clips, and write a fresh cache."}),
+        "project": ("H3_ADVANCE_PROJECT", {
+            "tooltip": "Optional project handle from H3 Advance Project. "
+                       "When connected, shot-cache prefixes are read/written "
+                       "under the project folder and only the safe unchanged "
+                       "prefix reported by the project can be restored."}),
     },
         # hidden inputs are not widgets, so saved workflows are unaffected
         "hidden": {"prompt": "PROMPT", "extra_pnginfo": "EXTRA_PNGINFO"}}

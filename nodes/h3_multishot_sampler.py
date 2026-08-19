@@ -110,6 +110,27 @@ except Exception:
     from h3_sampler_cache import h3_build_sampler_cache_base
 
 try:
+    from .h3_project import (
+        h3_advance_project_active,
+        h3_advance_project_record_prefix,
+        h3_advance_project_record_sampler_config,
+    )
+except Exception:
+    try:
+        from h3_project import (
+            h3_advance_project_active,
+            h3_advance_project_record_prefix,
+            h3_advance_project_record_sampler_config,
+        )
+    except Exception:
+        def h3_advance_project_active(_project):
+            return False
+        def h3_advance_project_record_prefix(*_args, **_kwargs):
+            return False
+        def h3_advance_project_record_sampler_config(*_args, **_kwargs):
+            return False
+
+try:
     from .h3_sampler_setup import (
         h3_apply_sampler_overrides,
         h3_handoff_geometry,
@@ -423,7 +444,7 @@ class H3MultishotMemorySampler:
             pin_renorm=False, reference_subjects="",
             reference_video=None, reference_video_audio=None,
             low_ram_master=False, audio_pin_frames=0, shot_cache="use_cache",
-            prompt=None, extra_pnginfo=None):
+            project=None, prompt=None, extra_pnginfo=None):
         # Keep the hidden PROMPT before anything can shadow it: the shot loop
         # rebinds `prompt` to this shot's conditioning TEXT, so by finalize()
         # the API graph is gone and the streamed master was tagged with the
@@ -531,7 +552,24 @@ class H3MultishotMemorySampler:
         # not a GPU cache. A cache hit restores the exact sampler state after
         # the last unchanged --- prompt and starts rendering at the first
         # changed shot, so prompt edits near the end do not re-pay shot 1..N.
-        _cache = _H3ShotCacheSession(shot_cache, shots, n)
+        _project_active = h3_advance_project_active(project)
+        _project_cache_dir = project.get("cache_dir") if _project_active else None
+        _project_safe_prefix = (
+            project.get("safe_prefix_shots") if _project_active else None)
+        _project_write_allowed = not (
+            _project_active and str(project.get("mode") or "") == "read_only")
+        if _project_active:
+            # KursatAs 2026-08-19 19:14: safe project editing means the
+            # sampler may restore only the unchanged prefix before the first
+            # changed shot. Shot K changed => restore at most K-1.
+            print("[H3Memory] project '%s': safe prefix %s/%d"
+                  % (project.get("slug") or project.get("name"),
+                     _project_safe_prefix, n), flush=True)
+        _cache = _H3ShotCacheSession(
+            shot_cache, shots, n, cache_dir=_project_cache_dir,
+            restore_prefix_limit=_project_safe_prefix,
+            cache_label="project_cache" if _project_active else "shot_cache",
+            write_allowed=_project_write_allowed)
         _cache_start = 0
 
         if _cache.enabled:
@@ -573,8 +611,12 @@ class H3MultishotMemorySampler:
                         reference_images=reference_images,
                         guide_audio=guide_audio, voice_ref=voice_ref,
                         reference_video=reference_video,
-                        reference_video_audio=reference_video_audio)
+                        reference_video_audio=reference_video_audio,
+                        project=project if _project_active else None)
                     _cache.configure(_base_obj)
+                    if _project_active:
+                        h3_advance_project_record_sampler_config(
+                            project, _cache.base_key, _base_obj)
                     _cache_start, _state = _cache.restore_prefix()
                     if _state is not None:
                         (
@@ -787,7 +829,10 @@ class H3MultishotMemorySampler:
             if save_every_shot:
                 # before the seam trim, so consecutive files overlap ~1s - a
                 # chain that dies at the mux can still be joined by hand
-                _write_shot_mp4(imgs, wav, sr, "video/H3_SHOTS/shot",
+                # KursatAs 2026-08-19 20:37: align per-shot debug videos with
+                # the Multishot Advance output folder naming convention.
+                _write_shot_mp4(imgs, wav, sr,
+                                "video/multishot_advance_shots/shot",
                                 f"shot {si + 1}/{n} saved", "H3Memory")
 
             h3_update_post_decode_state(
@@ -811,11 +856,15 @@ class H3MultishotMemorySampler:
             else:
                 frames_parts.append(imgs.cpu().half())
             audio_parts.append((wav if wav.ndim == 3 else wav.unsqueeze(0)).cpu())
-            _cache.save_prefix(
+            _saved_prefix = _cache.save_prefix(
                 si + 1,
                 h3_build_sampler_cache_state(
                     bank, frames_parts, audio_parts, _lat_v_parts,
                     _lat_a_parts, voice_block, state))
+            if _project_active and _saved_prefix:
+                h3_advance_project_record_prefix(
+                    project, si + 1, n, _cache.base_key,
+                    _cache.prefix_key(si + 1), _saved_prefix)
 
         sr = state.sr
         return h3_finalize_sampler_outputs(

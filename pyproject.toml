@@ -1,8 +1,8 @@
 [project]
 name = "ComfyUI-H3-Multishot-Advance"
 description = "Advanced multi-shot chaining for MiniMax-H3 audio+video with resumable cache, continuity controls, and unified model loading."
-# KursatAs 2026-08-19 06:07: bump patch version for sampler-level speech guard.
-version = "1.0.2"
+# KursatAs 2026-08-19 21:05: bump minor version for the H3 Advance Project Node.
+version = "1.1.0"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 

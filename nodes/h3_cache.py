@@ -2,6 +2,7 @@
 """Shot-cache support for H3 Multishot Advance."""
 
 import json
+import os
 
 try:
     from .h3_notify import h3_info as _h3_info
@@ -24,7 +25,10 @@ def _h3_cache_root():
         base = folder_paths.get_user_directory()
     except Exception:
         base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.abspath(os.path.join(base, "h3_shot_cache"))
+    # KursatAs 2026-08-19 20:37: use a package-specific cache root so
+    # Multishot Advance cache files do not mix with legacy H3 cache folders.
+    return os.path.abspath(os.path.join(base,
+                                        "multishot_advance_shot_cache"))
 
 
 def _h3_cache_tensor_bytes(t):
@@ -143,13 +147,26 @@ class _H3ShotCacheSession:
     state and should not be hidden behind cache plumbing.
     """
 
-    def __init__(self, mode, shots, total_shots):
+    def __init__(self, mode, shots, total_shots, cache_dir=None,
+                 restore_prefix_limit=None, cache_label="shot_cache",
+                 write_allowed=True):
         self.mode = _h3_shot_cache_mode(mode)
+        if not write_allowed and self.mode == "rebuild_cache":
+            # KursatAs 2026-08-19 19:18: read-only project mode may inspect
+            # existing prefixes but must never clear or rewrite project cache.
+            self.mode = "use_cache"
         self.shots = list(shots)
         self.total_shots = int(total_shots)
         self.enabled = self.mode in ("use_cache", "rebuild_cache")
         self.write_enabled = False
         self.base_key = None
+        self.override_cache_dir = (
+            os.path.abspath(cache_dir) if cache_dir else None)
+        self.restore_prefix_limit = (
+            None if restore_prefix_limit is None
+            else max(0, min(self.total_shots, int(restore_prefix_limit))))
+        self.cache_label = str(cache_label or "shot_cache")
+        self.write_allowed = bool(write_allowed)
         self.cache_dir = None
 
     def disable_for_streaming(self):
@@ -180,9 +197,18 @@ class _H3ShotCacheSession:
         _torch  # preserve the old early torch dependency check for cache runs
         self.base_key = _h3_cache_key(base_obj)
         root = _h3_cache_root()
-        self.cache_dir = os.path.join(root, self.base_key[:16])
+        if self.override_cache_dir:
+            # KursatAs 2026-08-19 19:14: project cache writes directly under
+            # user/multishot_advance_projects/<project>/cache so the project
+            # folder owns the
+            # editable render state; completed videos are not archived here.
+            self.cache_dir = self.override_cache_dir
+            delete_root = os.path.dirname(self.cache_dir)
+        else:
+            self.cache_dir = os.path.join(root, self.base_key[:16])
+            delete_root = root
         if self.mode == "rebuild_cache":
-            _h3_safe_rmtree(self.cache_dir, root)
+            _h3_safe_rmtree(self.cache_dir, delete_root)
             print("[H3Memory] shot_cache: cleared %s"
                   % self.cache_dir, flush=True)
             _h3_info(
@@ -190,7 +216,12 @@ class _H3ShotCacheSession:
                 "existing compatible prefixes are ignored for this run.",
                 topic="shot_cache", tag="H3Memory", timeout_ms=4000)
         os.makedirs(self.cache_dir, exist_ok=True)
-        self.write_enabled = True
+        self.write_enabled = self.write_allowed
+        if self.override_cache_dir:
+            limit = (self.total_shots if self.restore_prefix_limit is None
+                     else self.restore_prefix_limit)
+            print("[H3Memory] project cache: %s | safe prefix %d/%d"
+                  % (self.cache_dir, limit, self.total_shots), flush=True)
 
     def restore_prefix(self):
         if self.mode == "rebuild_cache":
@@ -198,7 +229,9 @@ class _H3ShotCacheSession:
 
         import os
         import torch as _torch
-        for idx in range(self.total_shots, 0, -1):
+        limit = (self.total_shots if self.restore_prefix_limit is None
+                 else self.restore_prefix_limit)
+        for idx in range(limit, 0, -1):
             path = self.path(idx)
             if not os.path.isfile(path):
                 continue
@@ -239,7 +272,7 @@ class _H3ShotCacheSession:
 
     def save_prefix(self, idx, state):
         if not self.write_enabled:
-            return
+            return None
 
         import os
         import torch as _torch
@@ -259,6 +292,7 @@ class _H3ShotCacheSession:
             print("[H3Memory] shot_cache: stored prefix %d/%d -> %s"
                   % (idx, self.total_shots, os.path.basename(path)),
                   flush=True)
+            return path
         except Exception as exc:
             self.write_enabled = False
             try:
@@ -268,6 +302,7 @@ class _H3ShotCacheSession:
                 pass
             print("[H3Memory] shot_cache disabled: could not write "
                   "prefix %d (%s)" % (idx, exc), flush=True)
+            return None
 
 
 def _h3_restore_shot_cache_state(state, bank):
