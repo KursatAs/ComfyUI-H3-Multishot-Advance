@@ -127,6 +127,19 @@ If you use GGUF H3 checkpoints or GGUF text encoders, install
 H3 GGUF architecture hook and the `apply_gguf_arch_patch.py` fallback for
 installs that need an on-disk patch.
 
+<!-- KursatAs 2026-08-19 14:30: document the conditional context_pin custom-node dependency. -->
+### Conditional dependency: Motion Context
+
+The sampler's default `continuity=context_pin` mode needs
+[ComfyUI-H3-Motion-Context](https://github.com/NikoDemon80/ComfyUI-H3-Motion-Context).
+That pack provides the `MiniMaxH3MotionContext` node used to pin the previous
+shot's raw latent tail into the next shot.
+
+If Motion Context is not installed, switch `continuity` to a mode that does not
+need it, such as `first_frame`, `cut`, `flf_chain`, or `latent_handoff`.
+`ComfyUI-MiniMaxH3-Contex-Loop` is a separate companion/fork and is not a
+replacement for the `MiniMaxH3MotionContext` node id expected by `context_pin`.
+
 ## Notes
 
 - Model files are not included.
